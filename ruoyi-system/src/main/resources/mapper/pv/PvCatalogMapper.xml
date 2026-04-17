@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.pv.PvCatalogMapper">
+
+    <resultMap type="PvStationTag" id="PvStationTagResult">
+        <result property="tagId" column="tag_id"/>
+        <result property="tagName" column="tag_name"/>
+        <result property="description" column="description"/>
+        <result property="legacyFirebaseId" column="legacy_firebase_id"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <resultMap type="PvInverterModel" id="PvInverterModelResult">
+        <result property="modelId" column="model_id"/>
+        <result property="brand" column="brand"/>
+        <result property="modelName" column="model_name"/>
+        <result property="mqttProtocol" column="mqtt_protocol"/>
+        <result property="legacyFirebaseId" column="legacy_firebase_id"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <sql id="selectStationTagVo">
+        select tag_id, tag_name, description, legacy_firebase_id, create_by, create_time, update_by, update_time, remark
+        from pv_station_tag
+    </sql>
+
+    <sql id="selectInverterModelVo">
+        select model_id, brand, model_name, mqtt_protocol, legacy_firebase_id, create_by, create_time, update_by, update_time, remark
+        from pv_inverter_model
+    </sql>
+
+    <select id="selectStationTagList" parameterType="PvStationTag" resultMap="PvStationTagResult">
+        <include refid="selectStationTagVo"/>
+        <where>
+            <if test="tagId != null">and tag_id = #{tagId}</if>
+            <if test="tagName != null and tagName != ''">and tag_name like concat('%', #{tagName}, '%')</if>
+        </where>
+        order by create_time desc, tag_id desc
+    </select>
+
+    <select id="selectStationTagById" parameterType="Long" resultMap="PvStationTagResult">
+        <include refid="selectStationTagVo"/>
+        where tag_id = #{tagId}
+    </select>
+
+    <insert id="insertStationTag" parameterType="PvStationTag" useGeneratedKeys="true" keyProperty="tagId">
+        insert into pv_station_tag (
+            tag_name, description, legacy_firebase_id, remark, create_by, create_time
+        ) values (
+            #{tagName}, #{description}, #{legacyFirebaseId}, #{remark}, #{createBy}, #{createTime}
+        )
+    </insert>
+
+    <update id="updateStationTag" parameterType="PvStationTag">
+        update pv_station_tag
+        <set>
+            <if test="tagName != null and tagName != ''">tag_name = #{tagName},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="legacyFirebaseId != null">legacy_firebase_id = #{legacyFirebaseId},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="updateBy != null and updateBy != ''">update_by = #{updateBy},</if>
+            update_time = #{updateTime}
+        </set>
+        where tag_id = #{tagId}
+    </update>
+
+    <delete id="deleteStationTagByIds" parameterType="Long">
+        delete from pv_station_tag where tag_id in
+        <foreach item="tagId" collection="array" open="(" separator="," close=")">
+            #{tagId}
+        </foreach>
+    </delete>
+
+    <select id="selectInverterModelList" parameterType="PvInverterModel" resultMap="PvInverterModelResult">
+        <include refid="selectInverterModelVo"/>
+        <where>
+            <if test="modelId != null">and model_id = #{modelId}</if>
+            <if test="brand != null and brand != ''">and brand like concat('%', #{brand}, '%')</if>
+            <if test="modelName != null and modelName != ''">and model_name like concat('%', #{modelName}, '%')</if>
+        </where>
+        order by create_time desc, model_id desc
+    </select>
+
+    <select id="selectInverterModelById" parameterType="Long" resultMap="PvInverterModelResult">
+        <include refid="selectInverterModelVo"/>
+        where model_id = #{modelId}
+    </select>
+
+    <insert id="insertInverterModel" parameterType="PvInverterModel" useGeneratedKeys="true" keyProperty="modelId">
+        insert into pv_inverter_model (
+            brand, model_name, mqtt_protocol, legacy_firebase_id, remark, create_by, create_time
+        ) values (
+            #{brand}, #{modelName}, #{mqttProtocol}, #{legacyFirebaseId}, #{remark}, #{createBy}, #{createTime}
+        )
+    </insert>
+
+    <update id="updateInverterModel" parameterType="PvInverterModel">
+        update pv_inverter_model
+        <set>
+            <if test="brand != null and brand != ''">brand = #{brand},</if>
+            <if test="modelName != null and modelName != ''">model_name = #{modelName},</if>
+            <if test="mqttProtocol != null">mqtt_protocol = #{mqttProtocol},</if>
+            <if test="legacyFirebaseId != null">legacy_firebase_id = #{legacyFirebaseId},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="updateBy != null and updateBy != ''">update_by = #{updateBy},</if>
+            update_time = #{updateTime}
+        </set>
+        where model_id = #{modelId}
+    </update>
+
+    <delete id="deleteInverterModelByIds" parameterType="Long">
+        delete from pv_inverter_model where model_id in
+        <foreach item="modelId" collection="array" open="(" separator="," close=")">
+            #{modelId}
+        </foreach>
+    </delete>
+
+</mapper>

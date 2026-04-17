@@ -41,4 +41,14 @@ public class CacheConstants
      * 登录账户密码错误次数 redis key
      */
     public static final String PWD_ERR_CNT_KEY = "pwd_err_cnt:";
+
+    /**
+     * 光伏大屏汇总 redis key
+     */
+    public static final String PV_DASHBOARD_SUMMARY_KEY = "pv_dashboard_summary:";
+
+    /**
+     * 光伏告警推送节流 redis key
+     */
+    public static final String PV_ALERT_THROTTLE_KEY = "pv_alert_throttle:";
 }

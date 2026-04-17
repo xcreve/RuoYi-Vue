@@ -1,0 +1,375 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.pv.PvAssetMapper">
+
+    <resultMap type="PvStation" id="PvStationResult">
+        <result property="stationId" column="station_id"/>
+        <result property="stationName" column="station_name"/>
+        <result property="location" column="location"/>
+        <result property="capacityMw" column="capacity_mw"/>
+        <result property="tagId" column="tag_id"/>
+        <result property="tagName" column="tag_name"/>
+        <result property="legacyFirebaseId" column="legacy_firebase_id"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <resultMap type="PvGateway" id="PvGatewayResult">
+        <result property="gatewayId" column="gateway_id"/>
+        <result property="stationId" column="station_id"/>
+        <result property="stationName" column="station_name"/>
+        <result property="gatewayName" column="gateway_name"/>
+        <result property="gatewayType" column="gateway_type"/>
+        <result property="serialNumber" column="serial_number"/>
+        <result property="status" column="status"/>
+        <result property="communicationType" column="communication_type"/>
+        <result property="protocol" column="protocol"/>
+        <result property="brokerUrl" column="broker_url"/>
+        <result property="topic" column="topic"/>
+        <result property="pollingIntervalSec" column="polling_interval_sec"/>
+        <result property="lastSeen" column="last_seen"/>
+        <result property="legacyFirebaseId" column="legacy_firebase_id"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <resultMap type="PvInverter" id="PvInverterResult">
+        <result property="inverterId" column="inverter_id"/>
+        <result property="gatewayId" column="gateway_id"/>
+        <result property="gatewayName" column="gateway_name"/>
+        <result property="modelId" column="model_id"/>
+        <result property="brand" column="brand"/>
+        <result property="modelName" column="model_name"/>
+        <result property="inverterNumber" column="inverter_number"/>
+        <result property="serialNumber" column="serial_number"/>
+        <result property="status" column="status"/>
+        <result property="lastSeen" column="last_seen"/>
+        <result property="currentPower" column="current_power"/>
+        <result property="dailyYield" column="daily_yield"/>
+        <result property="legacyFirebaseId" column="legacy_firebase_id"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <resultMap type="PvTelemetry" id="PvTelemetryResult">
+        <result property="telemetryId" column="telemetry_id"/>
+        <result property="inverterId" column="inverter_id"/>
+        <result property="activePower" column="active_power"/>
+        <result property="dailyYield" column="daily_yield"/>
+        <result property="totalYield" column="total_yield"/>
+        <result property="voltage" column="voltage"/>
+        <result property="current" column="current"/>
+        <result property="collectTime" column="collect_time"/>
+        <result property="legacyFirebaseId" column="legacy_firebase_id"/>
+    </resultMap>
+
+    <resultMap type="PvHourlyYieldBucket" id="PvHourlyYieldBucketResult">
+        <result property="stationId" column="station_id"/>
+        <result property="stationName" column="station_name"/>
+        <result property="tagName" column="tag_name"/>
+        <result property="hourOfDay" column="hour_of_day"/>
+        <result property="yieldKwh" column="yield_kwh"/>
+    </resultMap>
+
+    <sql id="selectStationVo">
+        select s.station_id, s.station_name, s.location, s.capacity_mw, s.tag_id, t.tag_name,
+               s.legacy_firebase_id, s.create_by, s.create_time, s.update_by, s.update_time, s.remark
+        from pv_station s
+        left join pv_station_tag t on t.tag_id = s.tag_id
+    </sql>
+
+    <sql id="selectGatewayVo">
+        select g.gateway_id, g.station_id, s.station_name, g.gateway_name, g.gateway_type, g.serial_number,
+               g.status, g.communication_type, g.protocol, g.broker_url, g.topic, g.polling_interval_sec,
+               g.last_seen, g.legacy_firebase_id, g.create_by, g.create_time, g.update_by, g.update_time, g.remark
+        from pv_gateway g
+        left join pv_station s on s.station_id = g.station_id
+    </sql>
+
+    <sql id="selectInverterVo">
+        select i.inverter_id, i.gateway_id, g.gateway_name, i.model_id, m.brand, m.model_name,
+               i.inverter_number, i.serial_number, i.status, i.last_seen, i.current_power, i.daily_yield,
+               i.legacy_firebase_id, i.create_by, i.create_time, i.update_by, i.update_time, i.remark
+        from pv_inverter i
+        left join pv_gateway g on g.gateway_id = i.gateway_id
+        left join pv_inverter_model m on m.model_id = i.model_id
+    </sql>
+
+    <select id="selectStationList" parameterType="PvStation" resultMap="PvStationResult">
+        <include refid="selectStationVo"/>
+        <where>
+            <if test="stationId != null">and s.station_id = #{stationId}</if>
+            <if test="stationName != null and stationName != ''">and s.station_name like concat('%', #{stationName}, '%')</if>
+            <if test="location != null and location != ''">and s.location like concat('%', #{location}, '%')</if>
+            <if test="tagId != null">and s.tag_id = #{tagId}</if>
+        </where>
+        order by s.create_time desc, s.station_id desc
+    </select>
+
+    <select id="selectStationById" parameterType="Long" resultMap="PvStationResult">
+        <include refid="selectStationVo"/>
+        where s.station_id = #{stationId}
+    </select>
+
+    <insert id="insertStation" parameterType="PvStation" useGeneratedKeys="true" keyProperty="stationId">
+        insert into pv_station (
+            station_name, location, capacity_mw, tag_id, legacy_firebase_id, remark, create_by, create_time
+        ) values (
+            #{stationName}, #{location}, #{capacityMw}, #{tagId}, #{legacyFirebaseId}, #{remark}, #{createBy}, #{createTime}
+        )
+    </insert>
+
+    <update id="updateStation" parameterType="PvStation">
+        update pv_station
+        <set>
+            <if test="stationName != null and stationName != ''">station_name = #{stationName},</if>
+            <if test="location != null">location = #{location},</if>
+            <if test="capacityMw != null">capacity_mw = #{capacityMw},</if>
+            tag_id = #{tagId},
+            <if test="legacyFirebaseId != null">legacy_firebase_id = #{legacyFirebaseId},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="updateBy != null and updateBy != ''">update_by = #{updateBy},</if>
+            update_time = #{updateTime}
+        </set>
+        where station_id = #{stationId}
+    </update>
+
+    <delete id="deleteStationByIds" parameterType="Long">
+        delete from pv_station where station_id in
+        <foreach item="stationId" collection="array" open="(" separator="," close=")">
+            #{stationId}
+        </foreach>
+    </delete>
+
+    <select id="countGatewaysByStationIds" parameterType="Long" resultType="int">
+        select count(1) from pv_gateway where station_id in
+        <foreach item="stationId" collection="array" open="(" separator="," close=")">
+            #{stationId}
+        </foreach>
+    </select>
+
+    <select id="selectGatewayList" parameterType="PvGateway" resultMap="PvGatewayResult">
+        <include refid="selectGatewayVo"/>
+        <where>
+            <if test="gatewayId != null">and g.gateway_id = #{gatewayId}</if>
+            <if test="stationId != null">and g.station_id = #{stationId}</if>
+            <if test="gatewayName != null and gatewayName != ''">and g.gateway_name like concat('%', #{gatewayName}, '%')</if>
+            <if test="serialNumber != null and serialNumber != ''">and g.serial_number like concat('%', #{serialNumber}, '%')</if>
+            <if test="status != null and status != ''">and g.status = #{status}</if>
+            <if test="communicationType != null and communicationType != ''">and g.communication_type = #{communicationType}</if>
+        </where>
+        order by g.create_time desc, g.gateway_id desc
+    </select>
+
+    <select id="selectGatewayById" parameterType="Long" resultMap="PvGatewayResult">
+        <include refid="selectGatewayVo"/>
+        where g.gateway_id = #{gatewayId}
+    </select>
+
+    <insert id="insertGateway" parameterType="PvGateway" useGeneratedKeys="true" keyProperty="gatewayId">
+        insert into pv_gateway (
+            station_id, gateway_name, gateway_type, serial_number, status, communication_type, protocol,
+            broker_url, topic, polling_interval_sec, last_seen, legacy_firebase_id, remark, create_by, create_time
+        ) values (
+            #{stationId}, #{gatewayName}, #{gatewayType}, #{serialNumber}, #{status}, #{communicationType}, #{protocol},
+            #{brokerUrl}, #{topic}, #{pollingIntervalSec}, #{lastSeen}, #{legacyFirebaseId}, #{remark}, #{createBy}, #{createTime}
+        )
+    </insert>
+
+    <update id="updateGateway" parameterType="PvGateway">
+        update pv_gateway
+        <set>
+            <if test="stationId != null">station_id = #{stationId},</if>
+            <if test="gatewayName != null and gatewayName != ''">gateway_name = #{gatewayName},</if>
+            <if test="gatewayType != null and gatewayType != ''">gateway_type = #{gatewayType},</if>
+            <if test="serialNumber != null and serialNumber != ''">serial_number = #{serialNumber},</if>
+            <if test="status != null and status != ''">status = #{status},</if>
+            <if test="communicationType != null and communicationType != ''">communication_type = #{communicationType},</if>
+            <if test="protocol != null">protocol = #{protocol},</if>
+            <if test="brokerUrl != null">broker_url = #{brokerUrl},</if>
+            <if test="topic != null">topic = #{topic},</if>
+            <if test="pollingIntervalSec != null">polling_interval_sec = #{pollingIntervalSec},</if>
+            <if test="lastSeen != null">last_seen = #{lastSeen},</if>
+            <if test="legacyFirebaseId != null">legacy_firebase_id = #{legacyFirebaseId},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="updateBy != null and updateBy != ''">update_by = #{updateBy},</if>
+            update_time = #{updateTime}
+        </set>
+        where gateway_id = #{gatewayId}
+    </update>
+
+    <delete id="deleteGatewayByIds" parameterType="Long">
+        delete from pv_gateway where gateway_id in
+        <foreach item="gatewayId" collection="array" open="(" separator="," close=")">
+            #{gatewayId}
+        </foreach>
+    </delete>
+
+    <select id="countInvertersByGatewayIds" parameterType="Long" resultType="int">
+        select count(1) from pv_inverter where gateway_id in
+        <foreach item="gatewayId" collection="array" open="(" separator="," close=")">
+            #{gatewayId}
+        </foreach>
+    </select>
+
+    <update id="updateGatewayStatus">
+        update pv_gateway
+        set status = #{status}, last_seen = #{lastSeen}, update_time = sysdate()
+        where gateway_id = #{gatewayId}
+    </update>
+
+    <select id="selectInverterList" parameterType="PvInverter" resultMap="PvInverterResult">
+        <include refid="selectInverterVo"/>
+        <where>
+            <if test="inverterId != null">and i.inverter_id = #{inverterId}</if>
+            <if test="gatewayId != null">and i.gateway_id = #{gatewayId}</if>
+            <if test="modelId != null">and i.model_id = #{modelId}</if>
+            <if test="serialNumber != null and serialNumber != ''">and i.serial_number like concat('%', #{serialNumber}, '%')</if>
+            <if test="inverterNumber != null and inverterNumber != ''">and i.inverter_number like concat('%', #{inverterNumber}, '%')</if>
+            <if test="status != null and status != ''">and i.status = #{status}</if>
+        </where>
+        order by i.create_time desc, i.inverter_id desc
+    </select>
+
+    <select id="selectInverterById" parameterType="Long" resultMap="PvInverterResult">
+        <include refid="selectInverterVo"/>
+        where i.inverter_id = #{inverterId}
+    </select>
+
+    <insert id="insertInverter" parameterType="PvInverter" useGeneratedKeys="true" keyProperty="inverterId">
+        insert into pv_inverter (
+            gateway_id, model_id, inverter_number, serial_number, status, last_seen, current_power,
+            daily_yield, legacy_firebase_id, remark, create_by, create_time
+        ) values (
+            #{gatewayId}, #{modelId}, #{inverterNumber}, #{serialNumber}, #{status}, #{lastSeen}, #{currentPower},
+            #{dailyYield}, #{legacyFirebaseId}, #{remark}, #{createBy}, #{createTime}
+        )
+    </insert>
+
+    <update id="updateInverter" parameterType="PvInverter">
+        update pv_inverter
+        <set>
+            <if test="gatewayId != null">gateway_id = #{gatewayId},</if>
+            <if test="modelId != null">model_id = #{modelId},</if>
+            <if test="inverterNumber != null">inverter_number = #{inverterNumber},</if>
+            <if test="serialNumber != null and serialNumber != ''">serial_number = #{serialNumber},</if>
+            <if test="status != null and status != ''">status = #{status},</if>
+            <if test="lastSeen != null">last_seen = #{lastSeen},</if>
+            <if test="currentPower != null">current_power = #{currentPower},</if>
+            <if test="dailyYield != null">daily_yield = #{dailyYield},</if>
+            <if test="legacyFirebaseId != null">legacy_firebase_id = #{legacyFirebaseId},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="updateBy != null and updateBy != ''">update_by = #{updateBy},</if>
+            update_time = #{updateTime}
+        </set>
+        where inverter_id = #{inverterId}
+    </update>
+
+    <delete id="deleteInverterByIds" parameterType="Long">
+        delete from pv_inverter where inverter_id in
+        <foreach item="inverterId" collection="array" open="(" separator="," close=")">
+            #{inverterId}
+        </foreach>
+    </delete>
+
+    <select id="selectTelemetryList" resultMap="PvTelemetryResult">
+        select telemetry_id, inverter_id, active_power, daily_yield, total_yield, voltage, current, collect_time, legacy_firebase_id
+        from pv_telemetry
+        order by collect_time desc, telemetry_id desc
+    </select>
+
+    <select id="selectTelemetryByRange" resultMap="PvTelemetryResult">
+        select telemetry_id, inverter_id, active_power, daily_yield, total_yield, voltage, current, collect_time, legacy_firebase_id
+        from pv_telemetry
+        where collect_time between #{startTime} and #{endTime}
+        order by collect_time asc, telemetry_id asc
+    </select>
+
+    <delete id="deleteTelemetryBatchBefore">
+        delete from pv_telemetry
+        where collect_time &lt; #{cutoffTime}
+        order by collect_time asc, telemetry_id asc
+        limit #{limit}
+    </delete>
+
+    <select id="selectHourlyYieldBuckets" resultMap="PvHourlyYieldBucketResult">
+        select s.station_id, s.station_name, ifnull(t.tag_name, '未分组') as tag_name, x.hour_of_day,
+               cast(sum(x.delta) as decimal(12,2)) as yield_kwh
+        from (
+            select y.station_id, y.inverter_id, y.collect_date, y.hour_of_day,
+                   greatest(
+                       max(case when y.rn_desc = 1 then y.daily_yield end) -
+                       max(case when y.rn_asc = 1 then y.daily_yield end),
+                       0
+                   ) as delta
+            from (
+                select g.station_id, pt.inverter_id, date(pt.collect_time) as collect_date,
+                       hour(pt.collect_time) as hour_of_day, pt.daily_yield,
+                       row_number() over (
+                           partition by g.station_id, pt.inverter_id, date(pt.collect_time), hour(pt.collect_time)
+                           order by pt.collect_time asc, pt.telemetry_id asc
+                       ) as rn_asc,
+                       row_number() over (
+                           partition by g.station_id, pt.inverter_id, date(pt.collect_time), hour(pt.collect_time)
+                           order by pt.collect_time desc, pt.telemetry_id desc
+                       ) as rn_desc
+                from pv_telemetry pt
+                inner join pv_inverter i on i.inverter_id = pt.inverter_id
+                inner join pv_gateway g on g.gateway_id = i.gateway_id
+                where pt.collect_time &gt;= #{startTime}
+                  and pt.collect_time &lt; date_add(#{endTime}, interval 1 second)
+            ) y
+            group by y.station_id, y.inverter_id, y.collect_date, y.hour_of_day
+        ) x
+        inner join pv_station s on s.station_id = x.station_id
+        left join pv_station_tag t on t.tag_id = s.tag_id
+        <where>
+            <if test="tagId != null">and s.tag_id = #{tagId}</if>
+        </where>
+        group by s.station_id, s.station_name, t.tag_name, x.hour_of_day
+        order by s.station_id asc, x.hour_of_day asc
+    </select>
+
+    <insert id="insertTelemetryBatch">
+        insert into pv_telemetry (
+            inverter_id, active_power, daily_yield, total_yield, voltage, current, collect_time, legacy_firebase_id
+        ) values
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.inverterId}, #{item.activePower}, #{item.dailyYield}, #{item.totalYield},
+                #{item.voltage}, #{item.current}, #{item.collectTime}, #{item.legacyFirebaseId}
+            )
+        </foreach>
+    </insert>
+
+    <update id="updateInverterStatus">
+        update pv_inverter
+        set status = #{status},
+            last_seen = #{lastSeen},
+            current_power = #{currentPower},
+            daily_yield = #{dailyYield},
+            update_time = sysdate()
+        where inverter_id = #{inverterId}
+    </update>
+
+    <update id="updateInvertersOfflineByGatewayId">
+        update pv_inverter
+        set status = 'offline',
+            current_power = 0.00,
+            update_time = sysdate()
+        where gateway_id = #{gatewayId}
+          and status &lt;&gt; 'offline'
+    </update>
+
+</mapper>

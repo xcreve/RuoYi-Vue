@@ -581,6 +581,14 @@ public class ExcelUtil<T>
     {
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setCharacterEncoding("utf-8");
+        try
+        {
+            FileUtils.setAttachmentResponseHeader(response, encodingFilename(sheetName));
+        }
+        catch (IOException e)
+        {
+            throw new UtilException("设置导出响应头失败");
+        }
         this.init(list, sheetName, title, Type.EXPORT);
         exportExcel(response);
     }
@@ -602,6 +610,8 @@ public class ExcelUtil<T>
         {
             response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             response.setCharacterEncoding("utf-8");
+            ExcelUtil firstUtil = new ExcelUtil(sheets.get(0).getClazz());
+            FileUtils.setAttachmentResponseHeader(response, firstUtil.encodingFilename(sheets.get(0).getSheetName()));
             wb.write(response.getOutputStream());
         }
         catch (Exception e)
@@ -742,6 +752,14 @@ public class ExcelUtil<T>
     {
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setCharacterEncoding("utf-8");
+        try
+        {
+            FileUtils.setAttachmentResponseHeader(response, encodingFilename(sheetName));
+        }
+        catch (IOException e)
+        {
+            throw new UtilException("设置导出响应头失败");
+        }
         this.init(null, sheetName, title, Type.IMPORT);
         exportExcel(response);
     }

@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.pv.PvMonitoringMapper">
+
+    <resultMap type="PvDashboardSummary" id="PvDashboardSummaryResult">
+        <result property="totalStations" column="total_stations"/>
+        <result property="totalCapacityMw" column="total_capacity_mw"/>
+        <result property="totalInverters" column="total_inverters"/>
+        <result property="onlineInverters" column="online_inverters"/>
+        <result property="currentPowerKw" column="current_power_kw"/>
+        <result property="dailyYieldKwh" column="daily_yield_kwh"/>
+        <result property="activeAlerts" column="active_alerts"/>
+    </resultMap>
+
+    <resultMap type="PvAlert" id="PvAlertResult">
+        <result property="alertId" column="alert_id"/>
+        <result property="level" column="level"/>
+        <result property="content" column="content"/>
+        <result property="source" column="source"/>
+        <result property="occurTime" column="occur_time"/>
+        <result property="status" column="status"/>
+        <result property="resolvedAt" column="resolved_at"/>
+        <result property="resolvedBy" column="resolved_by"/>
+        <result property="legacyFirebaseId" column="legacy_firebase_id"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <resultMap type="PvPowerSeriesPoint" id="PvPowerSeriesPointResult">
+        <result property="hour" column="hour"/>
+        <result property="avgPowerKw" column="avg_power_kw"/>
+    </resultMap>
+
+    <resultMap type="PvAlertRule" id="PvAlertRuleResult">
+        <result property="ruleId" column="rule_id"/>
+        <result property="level" column="level"/>
+        <result property="channelId" column="channel_id"/>
+        <result property="throttleSec" column="throttle_sec"/>
+        <result property="channelType" column="channel_type"/>
+        <result property="target" column="target"/>
+        <result property="channelEnabled" column="channel_enabled"/>
+    </resultMap>
+
+    <select id="selectDashboardSummary" resultMap="PvDashboardSummaryResult">
+        select (select count(1) from pv_station) as total_stations,
+               cast(ifnull((select sum(capacity_mw) from pv_station), 0) as decimal(12,2)) as total_capacity_mw,
+               (select count(1) from pv_inverter) as total_inverters,
+               (select count(1) from pv_inverter where status = 'online') as online_inverters,
+               cast(ifnull((select sum(current_power) from pv_inverter), 0) as decimal(12,2)) as current_power_kw,
+               cast(ifnull((select sum(daily_yield) from pv_inverter), 0) as decimal(12,2)) as daily_yield_kwh,
+               (select count(1) from pv_alert where status = 'active') as active_alerts
+    </select>
+
+    <select id="selectAlertList" parameterType="PvAlert" resultMap="PvAlertResult">
+        select alert_id, level, content, source, occur_time, status, resolved_at, resolved_by,
+               legacy_firebase_id, create_by, create_time, update_by, update_time, remark
+        from pv_alert
+        <where>
+            <if test="alertId != null">and alert_id = #{alertId}</if>
+            <if test="level != null and level != ''">and level = #{level}</if>
+            <if test="status != null and status != ''">and status = #{status}</if>
+            <if test="content != null and content != ''">and content like concat('%', #{content}, '%')</if>
+            <if test="source != null and source != ''">and source like concat('%', #{source}, '%')</if>
+        </where>
+        order by occur_time desc, alert_id desc
+    </select>
+
+    <select id="selectPowerSeriesPoints" resultMap="PvPowerSeriesPointResult">
+        select date_format(collect_time, '%Y-%m-%d %H:00:00') as hour,
+               cast(avg(active_power) as decimal(12,2)) as avg_power_kw
+        from pv_telemetry
+        where collect_time &gt;= #{startTime}
+        group by date_format(collect_time, '%Y-%m-%d %H:00:00')
+        order by hour asc
+    </select>
+
+    <select id="selectAlertRulesByLevel" resultMap="PvAlertRuleResult">
+        select r.rule_id,
+               r.level,
+               r.channel_id,
+               r.throttle_sec,
+               c.channel_type,
+               c.target,
+               c.enabled as channel_enabled
+        from pv_alert_rule r
+        inner join pv_alert_channel c on c.channel_id = r.channel_id
+        where r.level = #{level}
+        order by r.rule_id asc
+    </select>
+
+    <insert id="insertAlert" parameterType="PvAlert" useGeneratedKeys="true" keyProperty="alertId">
+        insert into pv_alert (
+            level, content, source, occur_time, status, resolved_at, resolved_by, legacy_firebase_id,
+            remark, create_by, create_time
+        ) values (
+            #{level}, #{content}, #{source}, #{occurTime}, #{status}, #{resolvedAt}, #{resolvedBy},
+            #{legacyFirebaseId}, #{remark}, #{createBy}, #{createTime}
+        )
+    </insert>
+
+    <update id="resolveAlert">
+        update pv_alert
+        set status = 'resolved',
+            resolved_by = #{resolvedBy},
+            resolved_at = #{resolvedAt},
+            update_by = #{resolvedBy},
+            update_time = sysdate()
+        where alert_id = #{alertId}
+          and status = 'active'
+    </update>
+
+    <update id="resolveAllActiveAlerts">
+        update pv_alert
+        set status = 'resolved',
+            resolved_by = #{resolvedBy},
+            resolved_at = #{resolvedAt},
+            update_by = #{resolvedBy},
+            update_time = sysdate()
+        where status = 'active'
+    </update>
+
+</mapper>
