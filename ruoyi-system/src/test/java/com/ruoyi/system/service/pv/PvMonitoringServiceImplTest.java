@@ -1,5 +1,6 @@
 package com.ruoyi.system.service.pv;
 
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -21,9 +22,11 @@ import com.ruoyi.system.domain.pv.PvGateway;
 import com.ruoyi.system.domain.pv.PvHourlyYieldBucket;
 import com.ruoyi.system.domain.pv.PvHourlyYieldRow;
 import com.ruoyi.system.domain.pv.PvInverter;
+import com.ruoyi.system.domain.pv.PvInverterModel;
 import com.ruoyi.system.domain.pv.PvPowerSeriesPoint;
 import com.ruoyi.system.domain.pv.PvTelemetry;
 import com.ruoyi.system.mapper.pv.PvAssetMapper;
+import com.ruoyi.system.mapper.pv.PvCatalogMapper;
 import com.ruoyi.system.mapper.pv.PvMonitoringMapper;
 import com.ruoyi.system.service.pv.impl.PvMonitoringServiceImpl;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -50,6 +53,9 @@ class PvMonitoringServiceImplTest
 
     @Mock
     private PvAssetMapper assetMapper;
+
+    @Mock
+    private PvCatalogMapper catalogMapper;
 
     @Mock
     private RedisCache redisCache;
@@ -298,6 +304,105 @@ class PvMonitoringServiceImplTest
         assertBigDecimalEquals("912.30", telemetryList.get(1).getTotalYield());
         assertBigDecimalEquals("231.00", telemetryList.get(1).getVoltage());
         assertBigDecimalEquals("11.11", telemetryList.get(1).getCurrent());
+    }
+
+    @Test
+    void pollGatewayTelemetryShouldReadLiveModbusRtuRegistersWhenBrokerUrlConfigured() throws Exception
+    {
+        service.setModbusRtuRegisterReader((host, port, unitId, connectTimeoutMs, readTimeoutMs, startAddress, quantity) -> {
+            assertEquals("127.0.0.1", host);
+            assertEquals(8502, port);
+            assertEquals(1000, connectTimeoutMs);
+            assertEquals(1000, readTimeoutMs);
+            assertEquals(0, startAddress);
+            assertEquals(8, quantity);
+            if (unitId == 3)
+            {
+                return new int[] { 0, 2345, 0, 567, 0, 8901, 2299, 876 };
+            }
+            if (unitId == 4)
+            {
+                return new int[] { 0, 3456, 0, 678, 0, 9012, 2301, 1098 };
+            }
+            throw new AssertionError("Unexpected Modbus unitId: " + unitId);
+        });
+
+        PvGateway gateway = gateway(9L, "Polling", "ModbusRTU");
+        gateway.setBrokerUrl("tcp://127.0.0.1:8502?unitIds=3,4&connectTimeoutMs=1000&readTimeoutMs=1000");
+        gateway.setTopic("power=0:2:0.1;dailyYield=2:2:0.1;totalYield=4:2:0.1;voltage=6:1:0.1;current=7:1:0.01");
+        when(assetMapper.selectInverterList(any(PvInverter.class)))
+                .thenReturn(List.of(inverter(31L, 9L), inverter(32L, 9L)));
+
+        int rows = service.pollGatewayTelemetry(gateway);
+
+        assertEquals(2, rows);
+
+        ArgumentCaptor<List<PvTelemetry>> telemetryCaptor = ArgumentCaptor.forClass(List.class);
+        verify(assetMapper).insertTelemetryBatch(telemetryCaptor.capture());
+        List<PvTelemetry> telemetryList = telemetryCaptor.getValue();
+        assertEquals(2, telemetryList.size());
+        assertBigDecimalEquals("234.50", telemetryList.get(0).getActivePower());
+        assertBigDecimalEquals("56.70", telemetryList.get(0).getDailyYield());
+        assertBigDecimalEquals("890.10", telemetryList.get(0).getTotalYield());
+        assertBigDecimalEquals("229.90", telemetryList.get(0).getVoltage());
+        assertBigDecimalEquals("8.76", telemetryList.get(0).getCurrent());
+        assertBigDecimalEquals("345.60", telemetryList.get(1).getActivePower());
+        assertBigDecimalEquals("67.80", telemetryList.get(1).getDailyYield());
+        assertBigDecimalEquals("901.20", telemetryList.get(1).getTotalYield());
+        assertBigDecimalEquals("230.10", telemetryList.get(1).getVoltage());
+        assertBigDecimalEquals("10.98", telemetryList.get(1).getCurrent());
+    }
+
+    @Test
+    void pollGatewayTelemetryShouldUseModelRegisterProfileWhenGatewayTopicBlank() throws Exception
+    {
+        service.setModbusRtuRegisterReader((host, port, unitId, connectTimeoutMs, readTimeoutMs, startAddress, quantity) -> {
+            assertEquals("127.0.0.1", host);
+            assertEquals(8502, port);
+            assertEquals(7, unitId);
+            assertEquals(10, startAddress);
+            assertEquals(8, quantity);
+            return new int[] { 0, 1111, 0, 222, 0, 3333, 2300, 444 };
+        });
+
+        PvGateway gateway = gateway(10L, "Polling", "ModbusRTU");
+        gateway.setBrokerUrl("rtu://127.0.0.1:8502?unitId=7");
+        gateway.setTopic("");
+        PvInverter inverter = inverter(41L, 10L);
+        inverter.setModelId(99L);
+        PvInverterModel model = new PvInverterModel();
+        model.setModelId(99L);
+        model.setRegisterProfile(
+                "power=10:2:0.1;dailyYield=12:2:0.1;totalYield=14:2:0.1;voltage=16:1:0.1;current=17:1:0.01");
+        when(assetMapper.selectInverterList(any(PvInverter.class))).thenReturn(List.of(inverter));
+        when(catalogMapper.selectInverterModelById(99L)).thenReturn(model);
+
+        int rows = service.pollGatewayTelemetry(gateway);
+
+        assertEquals(1, rows);
+        verify(catalogMapper).selectInverterModelById(99L);
+
+        ArgumentCaptor<List<PvTelemetry>> telemetryCaptor = ArgumentCaptor.forClass(List.class);
+        verify(assetMapper).insertTelemetryBatch(telemetryCaptor.capture());
+        PvTelemetry telemetry = telemetryCaptor.getValue().get(0);
+        assertBigDecimalEquals("111.10", telemetry.getActivePower());
+        assertBigDecimalEquals("22.20", telemetry.getDailyYield());
+        assertBigDecimalEquals("333.30", telemetry.getTotalYield());
+        assertBigDecimalEquals("230.00", telemetry.getVoltage());
+        assertBigDecimalEquals("4.44", telemetry.getCurrent());
+    }
+
+    @Test
+    void executeModbusRtuReadCrc16ShouldComputeCorrectly() throws Exception
+    {
+        Method method = PvMonitoringServiceImpl.class.getDeclaredMethod("calculateModbusCrc16", byte[].class,
+                int.class);
+        method.setAccessible(true);
+        byte[] requestWithoutCrc = new byte[] { 0x01, 0x03, 0x00, 0x00, 0x00, 0x0A };
+
+        int crc = (int) method.invoke(null, requestWithoutCrc, requestWithoutCrc.length);
+
+        assertEquals(0xCDC5, crc);
     }
 
     private PvHourlyYieldBucket bucket(Long stationId, String stationName, String tagName, int hour, String yield)

@@ -21,6 +21,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="brand" column="brand"/>
         <result property="modelName" column="model_name"/>
         <result property="mqttProtocol" column="mqtt_protocol"/>
+        <result property="registerProfile" column="register_profile"/>
         <result property="legacyFirebaseId" column="legacy_firebase_id"/>
         <result property="createBy" column="create_by"/>
         <result property="createTime" column="create_time"/>
@@ -35,7 +36,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </sql>
 
     <sql id="selectInverterModelVo">
-        select model_id, brand, model_name, mqtt_protocol, legacy_firebase_id, create_by, create_time, update_by, update_time, remark
+        select model_id, brand, model_name, mqtt_protocol, register_profile, legacy_firebase_id, create_by, create_time, update_by, update_time, remark
         from pv_inverter_model
     </sql>
 
@@ -98,9 +99,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <insert id="insertInverterModel" parameterType="PvInverterModel" useGeneratedKeys="true" keyProperty="modelId">
         insert into pv_inverter_model (
-            brand, model_name, mqtt_protocol, legacy_firebase_id, remark, create_by, create_time
+            brand, model_name, mqtt_protocol, register_profile, legacy_firebase_id, remark, create_by, create_time
         ) values (
-            #{brand}, #{modelName}, #{mqttProtocol}, #{legacyFirebaseId}, #{remark}, #{createBy}, #{createTime}
+            #{brand}, #{modelName}, #{mqttProtocol}, #{registerProfile}, #{legacyFirebaseId}, #{remark}, #{createBy}, #{createTime}
         )
     </insert>
 
@@ -110,6 +111,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="brand != null and brand != ''">brand = #{brand},</if>
             <if test="modelName != null and modelName != ''">model_name = #{modelName},</if>
             <if test="mqttProtocol != null">mqtt_protocol = #{mqttProtocol},</if>
+            <if test="registerProfile != null">register_profile = #{registerProfile},</if>
             <if test="legacyFirebaseId != null">legacy_firebase_id = #{legacyFirebaseId},</if>
             <if test="remark != null">remark = #{remark},</if>
             <if test="updateBy != null and updateBy != ''">update_by = #{updateBy},</if>
