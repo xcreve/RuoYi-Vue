@@ -6,11 +6,13 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.ruoyi.common.annotation.DataScope;
 import com.ruoyi.common.constant.CacheConstants;
 import com.ruoyi.common.core.redis.RedisCache;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.MessageUtils;
+import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.system.domain.pv.PvGateway;
 import com.ruoyi.system.domain.pv.PvInverter;
 import com.ruoyi.system.domain.pv.PvStation;
@@ -37,6 +39,7 @@ public class PvAssetServiceImpl implements IPvAssetService
     private PvDashboardRefreshPublisher dashboardRefreshPublisher;
 
     @Override
+    @DataScope(deptAlias = "s", permission = "pv:station:list")
     public List<PvStation> selectStationList(PvStation query)
     {
         return assetMapper.selectStationList(query);
@@ -53,6 +56,7 @@ public class PvAssetServiceImpl implements IPvAssetService
     public int insertStation(PvStation station)
     {
         station.setCreateTime(DateUtils.getNowDate());
+        bindCurrentUserDept(station);
         int rows = assetMapper.insertStation(station);
         if (rows > 0)
         {
@@ -94,6 +98,7 @@ public class PvAssetServiceImpl implements IPvAssetService
     }
 
     @Override
+    @DataScope(deptAlias = "s", permission = "pv:gateway:list")
     public List<PvGateway> selectGatewayList(PvGateway query)
     {
         return assetMapper.selectGatewayList(query);
@@ -154,6 +159,7 @@ public class PvAssetServiceImpl implements IPvAssetService
     }
 
     @Override
+    @DataScope(deptAlias = "s", permission = "pv:inverter:list")
     public List<PvInverter> selectInverterList(PvInverter query)
     {
         return assetMapper.selectInverterList(query);
@@ -212,6 +218,22 @@ public class PvAssetServiceImpl implements IPvAssetService
     private BigDecimal defaultDecimal(BigDecimal value)
     {
         return value == null ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP) : value;
+    }
+
+    private void bindCurrentUserDept(PvStation station)
+    {
+        // 新建电站时绑定当前用户所在部门，后台任务无登录态时保持调用方传入值。
+        try
+        {
+            Long deptId = SecurityUtils.getLoginUser().getUser().getDeptId();
+            if (station.getDeptId() == null)
+            {
+                station.setDeptId(deptId);
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
     }
 
     private void evictDashboardSummaryCache()

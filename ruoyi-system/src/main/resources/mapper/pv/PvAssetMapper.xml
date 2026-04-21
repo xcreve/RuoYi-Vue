@@ -10,6 +10,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="location" column="location"/>
         <result property="capacityMw" column="capacity_mw"/>
         <result property="tagId" column="tag_id"/>
+        <result property="deptId" column="dept_id"/>
         <result property="tagName" column="tag_name"/>
         <result property="legacyFirebaseId" column="legacy_firebase_id"/>
         <result property="createBy" column="create_by"/>
@@ -83,7 +84,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </resultMap>
 
     <sql id="selectStationVo">
-        select s.station_id, s.station_name, s.location, s.capacity_mw, s.tag_id, t.tag_name,
+        select s.station_id, s.station_name, s.location, s.capacity_mw, s.tag_id, s.dept_id, t.tag_name,
                s.legacy_firebase_id, s.create_by, s.create_time, s.update_by, s.update_time, s.remark
         from pv_station s
         left join pv_station_tag t on t.tag_id = s.tag_id
@@ -104,6 +105,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         from pv_inverter i
         left join pv_gateway g on g.gateway_id = i.gateway_id
         left join pv_inverter_model m on m.model_id = i.model_id
+        left join pv_station s on s.station_id = g.station_id
     </sql>
 
     <select id="selectStationList" parameterType="PvStation" resultMap="PvStationResult">
@@ -113,6 +115,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="stationName != null and stationName != ''">and s.station_name like concat('%', #{stationName}, '%')</if>
             <if test="location != null and location != ''">and s.location like concat('%', #{location}, '%')</if>
             <if test="tagId != null">and s.tag_id = #{tagId}</if>
+            ${params.dataScope}
         </where>
         order by s.create_time desc, s.station_id desc
     </select>
@@ -124,9 +127,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <insert id="insertStation" parameterType="PvStation" useGeneratedKeys="true" keyProperty="stationId">
         insert into pv_station (
-            station_name, location, capacity_mw, tag_id, legacy_firebase_id, remark, create_by, create_time
+            station_name, location, capacity_mw, tag_id, dept_id, legacy_firebase_id, remark, create_by, create_time
         ) values (
-            #{stationName}, #{location}, #{capacityMw}, #{tagId}, #{legacyFirebaseId}, #{remark}, #{createBy}, #{createTime}
+            #{stationName}, #{location}, #{capacityMw}, #{tagId}, #{deptId}, #{legacyFirebaseId}, #{remark}, #{createBy}, #{createTime}
         )
     </insert>
 
@@ -137,6 +140,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="location != null">location = #{location},</if>
             <if test="capacityMw != null">capacity_mw = #{capacityMw},</if>
             tag_id = #{tagId},
+            <if test="deptId != null">dept_id = #{deptId},</if>
             <if test="legacyFirebaseId != null">legacy_firebase_id = #{legacyFirebaseId},</if>
             <if test="remark != null">remark = #{remark},</if>
             <if test="updateBy != null and updateBy != ''">update_by = #{updateBy},</if>
@@ -168,6 +172,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="serialNumber != null and serialNumber != ''">and g.serial_number like concat('%', #{serialNumber}, '%')</if>
             <if test="status != null and status != ''">and g.status = #{status}</if>
             <if test="communicationType != null and communicationType != ''">and g.communication_type = #{communicationType}</if>
+            ${params.dataScope}
         </where>
         order by g.create_time desc, g.gateway_id desc
     </select>
@@ -238,6 +243,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="serialNumber != null and serialNumber != ''">and i.serial_number like concat('%', #{serialNumber}, '%')</if>
             <if test="inverterNumber != null and inverterNumber != ''">and i.inverter_number like concat('%', #{inverterNumber}, '%')</if>
             <if test="status != null and status != ''">and i.status = #{status}</if>
+            ${params.dataScope}
         </where>
         order by i.create_time desc, i.inverter_id desc
     </select>
