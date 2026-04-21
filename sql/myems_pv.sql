@@ -51,6 +51,7 @@ create table pv_inverter_model (
   brand varchar(64) not null comment '品牌',
   model_name varchar(128) not null comment '型号',
   mqtt_protocol text comment 'MQTT协议说明',
+  register_profile text comment 'Modbus 寄存器地址模板（格式：power=addr:qty:scale[;signed];...）',
   legacy_firebase_id varchar(128) default null comment '历史Firebase ID',
   create_by varchar(64) default '' comment '创建者',
   create_time datetime default null comment '创建时间',

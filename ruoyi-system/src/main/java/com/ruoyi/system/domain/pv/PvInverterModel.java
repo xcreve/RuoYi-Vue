@@ -16,6 +16,8 @@ public class PvInverterModel extends BaseEntity
 
     private String mqttProtocol;
 
+    private String registerProfile;
+
     private String legacyFirebaseId;
 
     public Long getModelId()
@@ -60,6 +62,16 @@ public class PvInverterModel extends BaseEntity
     public void setMqttProtocol(String mqttProtocol)
     {
         this.mqttProtocol = mqttProtocol;
+    }
+
+    public String getRegisterProfile()
+    {
+        return registerProfile;
+    }
+
+    public void setRegisterProfile(String registerProfile)
+    {
+        this.registerProfile = registerProfile;
     }
 
     @Size(max = 128, message = "历史Firebase ID长度不能超过128个字符")

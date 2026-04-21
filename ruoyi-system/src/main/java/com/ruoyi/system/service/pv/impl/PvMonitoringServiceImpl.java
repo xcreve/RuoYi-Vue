@@ -37,11 +37,13 @@ import com.ruoyi.system.domain.pv.PvGateway;
 import com.ruoyi.system.domain.pv.PvHourlyYieldBucket;
 import com.ruoyi.system.domain.pv.PvHourlyYieldRow;
 import com.ruoyi.system.domain.pv.PvInverter;
+import com.ruoyi.system.domain.pv.PvInverterModel;
 import com.ruoyi.system.domain.pv.PvPowerSeriesPoint;
 import com.ruoyi.system.domain.pv.PvTelemetry;
 import com.ruoyi.system.event.pv.PvAlertCreatedPublisher;
 import com.ruoyi.system.event.pv.PvDashboardRefreshPublisher;
 import com.ruoyi.system.mapper.pv.PvAssetMapper;
+import com.ruoyi.system.mapper.pv.PvCatalogMapper;
 import com.ruoyi.system.mapper.pv.PvMonitoringMapper;
 import com.ruoyi.system.service.pv.IPvMonitoringService;
 
@@ -63,6 +65,9 @@ public class PvMonitoringServiceImpl implements IPvMonitoringService
     @Autowired
     private PvAssetMapper assetMapper;
 
+    @Autowired(required = false)
+    private PvCatalogMapper catalogMapper;
+
     @Autowired
     private RedisCache redisCache;
 
@@ -73,6 +78,8 @@ public class PvMonitoringServiceImpl implements IPvMonitoringService
     private PvAlertCreatedPublisher alertCreatedPublisher;
 
     private ModbusTcpRegisterReader modbusTcpRegisterReader = this::executeModbusTcpRead;
+
+    private ModbusRtuRegisterReader modbusRtuRegisterReader = this::executeModbusRtuRead;
 
     @Override
     public PvDashboardSummary getDashboardSummary()
@@ -268,14 +275,29 @@ public class PvMonitoringServiceImpl implements IPvMonitoringService
         LocalDateTime nowTime = LocalDateTime.now().withSecond(0).withNano(0);
         Date now = DateUtils.toDate(nowTime);
         List<PvTelemetry> telemetryList = new ArrayList<>();
-        ModbusTcpProfile modbusTcpProfile = resolveModbusTcpProfile(gateway);
+        ModbusTcpProfile modbusTcpProfile = "ModbusTCP".equalsIgnoreCase(gateway.getProtocol())
+                ? resolveModbusTcpProfile(gateway) : null;
+        ModbusRtuProfile modbusRtuProfile = "ModbusRTU".equalsIgnoreCase(gateway.getProtocol())
+                ? resolveModbusRtuProfile(gateway) : null;
+        Map<Long, Map<String, RegisterSpec>> modelSpecCache = new HashMap<>();
 
         for (int index = 0; index < inverters.size(); index++)
         {
             PvInverter inverter = inverters.get(index);
-            PolledTelemetrySnapshot snapshot = modbusTcpProfile == null
-                    ? buildSyntheticPolledSnapshot(gateway, inverter, index, nowTime, now)
-                    : readModbusTcpSnapshot(modbusTcpProfile, inverter, index);
+            Map<String, RegisterSpec> registerSpecs = resolveInverterRegisterSpecs(gateway, inverter, modelSpecCache);
+            PolledTelemetrySnapshot snapshot;
+            if (modbusTcpProfile != null)
+            {
+                snapshot = readModbusTcpSnapshot(modbusTcpProfile, inverter, index, registerSpecs);
+            }
+            else if (modbusRtuProfile != null)
+            {
+                snapshot = readModbusRtuSnapshot(modbusRtuProfile, inverter, index, registerSpecs);
+            }
+            else
+            {
+                snapshot = buildSyntheticPolledSnapshot(gateway, inverter, index, nowTime, now);
+            }
             PvTelemetry telemetry = new PvTelemetry();
             telemetry.setInverterId(inverter.getInverterId());
             telemetry.setActivePower(snapshot.getCurrentPower());
@@ -398,29 +420,52 @@ public class PvMonitoringServiceImpl implements IPvMonitoringService
                 buildPolledCurrent(currentPower));
     }
 
-    private PolledTelemetrySnapshot readModbusTcpSnapshot(ModbusTcpProfile profile, PvInverter inverter, int index)
+    private PolledTelemetrySnapshot readModbusTcpSnapshot(ModbusTcpProfile profile, PvInverter inverter, int index,
+            Map<String, RegisterSpec> registerSpecs)
     {
         int unitId = resolveUnitId(profile, index);
-        RegisterWindow window = profile.getWindow();
+        RegisterWindow window = buildRegisterWindow(registerSpecs);
         int[] registers = modbusTcpRegisterReader.read(profile.getHost(), profile.getPort(), unitId,
                 profile.getConnectTimeoutMs(), profile.getReadTimeoutMs(), window.getStartAddress(),
                 window.getQuantity());
+        return decodeModbusSnapshot(registers, window, registerSpecs);
+    }
+
+    private PolledTelemetrySnapshot readModbusRtuSnapshot(ModbusRtuProfile profile, PvInverter inverter, int index,
+            Map<String, RegisterSpec> registerSpecs)
+    {
+        int unitId = resolveUnitId(profile, index);
+        RegisterWindow window = buildRegisterWindow(registerSpecs);
+        int[] registers = modbusRtuRegisterReader.read(profile.getHost(), profile.getPort(), unitId,
+                profile.getConnectTimeoutMs(), profile.getReadTimeoutMs(), window.getStartAddress(),
+                window.getQuantity());
+        return decodeModbusSnapshot(registers, window, registerSpecs);
+    }
+
+    private PolledTelemetrySnapshot decodeModbusSnapshot(int[] registers, RegisterWindow window,
+            Map<String, RegisterSpec> registerSpecs)
+    {
         BigDecimal currentPower = normalizeTelemetryValue(
-                decodeRegisterValue(registers, window, profile.getRegisterSpecs().get("power")));
+                decodeRegisterValue(registers, window, registerSpecs.get("power")));
         BigDecimal dailyYield = normalizeTelemetryValue(
-                decodeRegisterValue(registers, window, profile.getRegisterSpecs().get("dailyYield")));
+                decodeRegisterValue(registers, window, registerSpecs.get("dailyYield")));
         BigDecimal totalYield = normalizeTelemetryValue(
-                decodeRegisterValue(registers, window, profile.getRegisterSpecs().get("totalYield")));
+                decodeRegisterValue(registers, window, registerSpecs.get("totalYield")));
         BigDecimal voltage = normalizeTelemetryValue(
-                decodeRegisterValue(registers, window, profile.getRegisterSpecs().get("voltage")));
+                decodeRegisterValue(registers, window, registerSpecs.get("voltage")));
         BigDecimal current = normalizeTelemetryValue(
-                decodeRegisterValue(registers, window, profile.getRegisterSpecs().get("current")));
+                decodeRegisterValue(registers, window, registerSpecs.get("current")));
         return new PolledTelemetrySnapshot(currentPower, dailyYield, totalYield, voltage, current);
     }
 
     public void setModbusTcpRegisterReader(ModbusTcpRegisterReader modbusTcpRegisterReader)
     {
         this.modbusTcpRegisterReader = modbusTcpRegisterReader == null ? this::executeModbusTcpRead : modbusTcpRegisterReader;
+    }
+
+    public void setModbusRtuRegisterReader(ModbusRtuRegisterReader modbusRtuRegisterReader)
+    {
+        this.modbusRtuRegisterReader = modbusRtuRegisterReader == null ? this::executeModbusRtuRead : modbusRtuRegisterReader;
     }
 
     private ModbusTcpProfile resolveModbusTcpProfile(PvGateway gateway)
@@ -466,6 +511,75 @@ public class PvMonitoringServiceImpl implements IPvMonitoringService
         {
             throw new IllegalArgumentException("ModbusTCP 采集地址格式无效: " + rawEndpoint, ex);
         }
+    }
+
+    private ModbusRtuProfile resolveModbusRtuProfile(PvGateway gateway)
+    {
+        if (!"ModbusRTU".equalsIgnoreCase(gateway.getProtocol()) || StringUtils.isBlank(gateway.getBrokerUrl()))
+        {
+            return null;
+        }
+
+        String rawEndpoint = gateway.getBrokerUrl().trim();
+        if (startsWithAnyIgnoreCase(rawEndpoint, "mqtt://", "ws://", "wss://", "http://", "https://"))
+        {
+            return null;
+        }
+
+        String normalizedEndpoint = rawEndpoint.contains("://") ? rawEndpoint : "tcp://" + rawEndpoint;
+        try
+        {
+            URI uri = new URI(normalizedEndpoint);
+            if (!StringUtils.equalsAnyIgnoreCase(uri.getScheme(), "tcp", "rtu", "modbus-rtu"))
+            {
+                return null;
+            }
+            if (StringUtils.isBlank(uri.getHost()))
+            {
+                throw new IllegalArgumentException("ModbusRTU 采集地址缺少主机名");
+            }
+
+            Map<String, String> params = parseQueryParams(uri.getRawQuery());
+            int unitId = parsePositiveInteger(params.get("unitId"), 1, "unitId");
+            int unitStep = parsePositiveInteger(params.get("unitStep"), 1, "unitStep");
+            int connectTimeoutMs = parsePositiveInteger(params.get("connectTimeoutMs"), MODBUS_TCP_DEFAULT_TIMEOUT_MS,
+                    "connectTimeoutMs");
+            int readTimeoutMs = parsePositiveInteger(params.get("readTimeoutMs"), MODBUS_TCP_DEFAULT_TIMEOUT_MS,
+                    "readTimeoutMs");
+            List<Integer> unitIds = parseIntegerList(params.get("unitIds"), "unitIds");
+            Map<String, RegisterSpec> registerSpecs = parseRegisterSpecs(gateway.getTopic());
+            return new ModbusRtuProfile(uri.getHost(), uri.getPort() > 0 ? uri.getPort() : MODBUS_TCP_DEFAULT_PORT,
+                    unitId, unitStep, unitIds, connectTimeoutMs, readTimeoutMs, registerSpecs,
+                    buildRegisterWindow(registerSpecs));
+        }
+        catch (URISyntaxException ex)
+        {
+            throw new IllegalArgumentException("ModbusRTU 采集地址格式无效: " + rawEndpoint, ex);
+        }
+    }
+
+    private Map<String, RegisterSpec> resolveInverterRegisterSpecs(PvGateway gateway, PvInverter inverter,
+            Map<Long, Map<String, RegisterSpec>> modelSpecCache)
+    {
+        if (StringUtils.isNotBlank(gateway.getTopic()))
+        {
+            return parseRegisterSpecs(gateway.getTopic());
+        }
+        if (inverter == null || inverter.getModelId() == null || catalogMapper == null)
+        {
+            return defaultRegisterSpecs();
+        }
+        return modelSpecCache.computeIfAbsent(inverter.getModelId(), this::resolveModelRegisterSpecs);
+    }
+
+    private Map<String, RegisterSpec> resolveModelRegisterSpecs(Long modelId)
+    {
+        PvInverterModel model = catalogMapper.selectInverterModelById(modelId);
+        if (model == null || StringUtils.isBlank(model.getRegisterProfile()))
+        {
+            return defaultRegisterSpecs();
+        }
+        return parseRegisterSpecs(model.getRegisterProfile());
     }
 
     private Map<String, String> parseQueryParams(String rawQuery)
@@ -644,6 +758,15 @@ public class PvMonitoringServiceImpl implements IPvMonitoringService
         return profile.getUnitId() + index * profile.getUnitStep();
     }
 
+    private int resolveUnitId(ModbusRtuProfile profile, int index)
+    {
+        if (index < profile.getUnitIds().size())
+        {
+            return profile.getUnitIds().get(index);
+        }
+        return profile.getUnitId() + index * profile.getUnitStep();
+    }
+
     private int[] executeModbusTcpRead(String host, int port, int unitId, int connectTimeoutMs, int readTimeoutMs,
             int startAddress, int quantity)
     {
@@ -695,6 +818,105 @@ public class PvMonitoringServiceImpl implements IPvMonitoringService
         {
             throw new IllegalStateException("ModbusTCP 采集失败: " + host + ":" + port + " unitId=" + unitId, ex);
         }
+    }
+
+    private int[] executeModbusRtuRead(String host, int port, int unitId, int connectTimeoutMs, int readTimeoutMs,
+            int startAddress, int quantity)
+    {
+        byte[] request = new byte[8];
+        request[0] = (byte) unitId;
+        request[1] = (byte) MODBUS_READ_HOLDING_REGISTERS;
+        request[2] = (byte) (startAddress >> 8);
+        request[3] = (byte) startAddress;
+        request[4] = (byte) (quantity >> 8);
+        request[5] = (byte) quantity;
+        int crc = calculateModbusCrc16(request, 6);
+        request[6] = (byte) crc;
+        request[7] = (byte) (crc >> 8);
+
+        try (Socket socket = new Socket())
+        {
+            socket.connect(new InetSocketAddress(host, port), connectTimeoutMs);
+            socket.setSoTimeout(readTimeoutMs);
+            DataOutputStream output = new DataOutputStream(socket.getOutputStream());
+            DataInputStream input = new DataInputStream(socket.getInputStream());
+
+            output.write(request);
+            output.flush();
+
+            int responseUnitId = input.readUnsignedByte();
+            int functionCode = input.readUnsignedByte();
+            if (functionCode == (MODBUS_READ_HOLDING_REGISTERS | 0x80))
+            {
+                byte[] exceptionFrame = new byte[5];
+                exceptionFrame[0] = (byte) responseUnitId;
+                exceptionFrame[1] = (byte) functionCode;
+                exceptionFrame[2] = input.readByte();
+                exceptionFrame[3] = input.readByte();
+                exceptionFrame[4] = input.readByte();
+                validateModbusRtuCrc(exceptionFrame, exceptionFrame.length);
+                throw new IllegalStateException("ModbusRTU 设备返回异常码: " + (exceptionFrame[2] & 0xFF));
+            }
+            int byteCount = input.readUnsignedByte();
+            if (byteCount != quantity * 2)
+            {
+                throw new IllegalStateException("ModbusRTU 响应字节数异常: " + byteCount);
+            }
+
+            byte[] responseFrame = new byte[3 + byteCount + 2];
+            responseFrame[0] = (byte) responseUnitId;
+            responseFrame[1] = (byte) functionCode;
+            responseFrame[2] = (byte) byteCount;
+            input.readFully(responseFrame, 3, byteCount + 2);
+            validateModbusRtuCrc(responseFrame, responseFrame.length);
+            if (responseUnitId != unitId || functionCode != MODBUS_READ_HOLDING_REGISTERS)
+            {
+                throw new IllegalStateException("ModbusRTU 响应头不匹配");
+            }
+
+            int[] registers = new int[quantity];
+            for (int index = 0; index < registers.length; index++)
+            {
+                int offset = 3 + index * 2;
+                registers[index] = ((responseFrame[offset] & 0xFF) << 8) | (responseFrame[offset + 1] & 0xFF);
+            }
+            return registers;
+        }
+        catch (IOException ex)
+        {
+            throw new IllegalStateException("ModbusRTU 采集失败: " + host + ":" + port + " unitId=" + unitId, ex);
+        }
+    }
+
+    private static void validateModbusRtuCrc(byte[] frame, int length)
+    {
+        int expected = calculateModbusCrc16(frame, length - 2);
+        int actual = ((frame[length - 1] & 0xFF) << 8) | (frame[length - 2] & 0xFF);
+        if (expected != actual)
+        {
+            throw new IllegalStateException("ModbusRTU 响应 CRC 校验失败");
+        }
+    }
+
+    private static int calculateModbusCrc16(byte[] frame, int length)
+    {
+        int crc = 0xFFFF;
+        for (int index = 0; index < length; index++)
+        {
+            crc ^= frame[index] & 0xFF;
+            for (int bit = 0; bit < 8; bit++)
+            {
+                if ((crc & 0x0001) != 0)
+                {
+                    crc = crc >> 1 ^ 0xA001;
+                }
+                else
+                {
+                    crc >>= 1;
+                }
+            }
+        }
+        return crc & 0xFFFF;
     }
 
     private BigDecimal decodeRegisterValue(int[] registers, RegisterWindow window, RegisterSpec registerSpec)
@@ -1079,8 +1301,95 @@ public class PvMonitoringServiceImpl implements IPvMonitoringService
         }
     }
 
+    private static class ModbusRtuProfile
+    {
+        private final String host;
+
+        private final int port;
+
+        private final int unitId;
+
+        private final int unitStep;
+
+        private final List<Integer> unitIds;
+
+        private final int connectTimeoutMs;
+
+        private final int readTimeoutMs;
+
+        private final Map<String, RegisterSpec> registerSpecs;
+
+        private final RegisterWindow window;
+
+        ModbusRtuProfile(String host, int port, int unitId, int unitStep, List<Integer> unitIds, int connectTimeoutMs,
+                int readTimeoutMs, Map<String, RegisterSpec> registerSpecs, RegisterWindow window)
+        {
+            this.host = host;
+            this.port = port;
+            this.unitId = unitId;
+            this.unitStep = unitStep;
+            this.unitIds = unitIds;
+            this.connectTimeoutMs = connectTimeoutMs;
+            this.readTimeoutMs = readTimeoutMs;
+            this.registerSpecs = registerSpecs;
+            this.window = window;
+        }
+
+        public String getHost()
+        {
+            return host;
+        }
+
+        public int getPort()
+        {
+            return port;
+        }
+
+        public int getUnitId()
+        {
+            return unitId;
+        }
+
+        public int getUnitStep()
+        {
+            return unitStep;
+        }
+
+        public List<Integer> getUnitIds()
+        {
+            return unitIds;
+        }
+
+        public int getConnectTimeoutMs()
+        {
+            return connectTimeoutMs;
+        }
+
+        public int getReadTimeoutMs()
+        {
+            return readTimeoutMs;
+        }
+
+        public Map<String, RegisterSpec> getRegisterSpecs()
+        {
+            return registerSpecs;
+        }
+
+        public RegisterWindow getWindow()
+        {
+            return window;
+        }
+    }
+
     @FunctionalInterface
     public interface ModbusTcpRegisterReader
+    {
+        int[] read(String host, int port, int unitId, int connectTimeoutMs, int readTimeoutMs, int startAddress,
+                int quantity);
+    }
+
+    @FunctionalInterface
+    public interface ModbusRtuRegisterReader
     {
         int[] read(String host, int port, int unitId, int connectTimeoutMs, int readTimeoutMs, int startAddress,
                 int quantity);
