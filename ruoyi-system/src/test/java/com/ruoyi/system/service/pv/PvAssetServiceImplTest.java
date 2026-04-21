@@ -2,6 +2,7 @@ package com.ruoyi.system.service.pv;
 
 import java.math.BigDecimal;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
+import com.ruoyi.common.annotation.DataScope;
 import com.ruoyi.common.constant.CacheConstants;
 import com.ruoyi.common.core.redis.RedisCache;
 import com.ruoyi.common.exception.ServiceException;
@@ -20,6 +22,7 @@ import com.ruoyi.common.utils.spring.SpringUtils;
 import com.ruoyi.system.domain.pv.PvGateway;
 import com.ruoyi.system.domain.pv.PvInverter;
 import com.ruoyi.system.domain.pv.PvStation;
+import com.ruoyi.system.event.pv.PvDashboardRefreshPublisher;
 import com.ruoyi.system.mapper.pv.PvAssetMapper;
 import com.ruoyi.system.service.pv.IPvMqttIngestService;
 import com.ruoyi.system.service.pv.impl.PvAssetServiceImpl;
@@ -47,6 +50,9 @@ class PvAssetServiceImplTest
 
     @Mock
     private IPvMqttIngestService mqttIngestService;
+
+    @Mock
+    private PvDashboardRefreshPublisher dashboardRefreshPublisher;
 
     @Mock
     private ConfigurableListableBeanFactory beanFactory;
@@ -84,6 +90,20 @@ class PvAssetServiceImplTest
     }
 
     @Test
+    void selectStationListShouldDelegateToMapper()
+    {
+        PvStation station = new PvStation();
+        station.setStationId(1L);
+        when(assetMapper.selectStationList(station)).thenReturn(List.of(station));
+
+        List<PvStation> result = service.selectStationList(station);
+
+        assertEquals(1, result.size());
+        assertSame(station, result.get(0));
+        verify(assetMapper).selectStationList(station);
+    }
+
+    @Test
     void selectMethodsShouldDelegateToMapper()
     {
         PvStation station = new PvStation();
@@ -106,6 +126,39 @@ class PvAssetServiceImplTest
         assertSame(gateway, service.selectGatewayById(2L));
         assertEquals(1, service.selectInverterList(inverter).size());
         assertSame(inverter, service.selectInverterById(3L));
+    }
+
+    @Test
+    void listMethodsShouldDeclarePvDataScopeAnnotations() throws Exception
+    {
+        assertDataScope(PvAssetServiceImpl.class.getMethod("selectStationList", PvStation.class), "pv:station:list");
+        assertDataScope(PvAssetServiceImpl.class.getMethod("selectGatewayList", PvGateway.class), "pv:gateway:list");
+        assertDataScope(PvAssetServiceImpl.class.getMethod("selectInverterList", PvInverter.class), "pv:inverter:list");
+    }
+
+    @Test
+    void stationShouldExposeDeptIdForDataScope()
+    {
+        PvStation station = new PvStation();
+
+        station.setDeptId(42L);
+
+        assertEquals(42L, station.getDeptId());
+    }
+
+    @Test
+    void insertStationShouldPersistAndEvictCache()
+    {
+        PvStation station = new PvStation();
+        station.setStationName("杭州湾储能站");
+        when(assetMapper.insertStation(station)).thenReturn(1);
+
+        int rows = service.insertStation(station);
+
+        assertEquals(1, rows);
+        verify(assetMapper).insertStation(station);
+        verify(redisCache).deleteObject(DASHBOARD_SUMMARY_CACHE_KEY);
+        verify(dashboardRefreshPublisher).publish("station.insert");
     }
 
     @Test
@@ -277,5 +330,13 @@ class PvAssetServiceImplTest
         Field field = SpringUtils.class.getDeclaredField("beanFactory");
         field.setAccessible(true);
         field.set(null, value);
+    }
+
+    private void assertDataScope(Method method, String permission)
+    {
+        DataScope dataScope = method.getAnnotation(DataScope.class);
+        assertNotNull(dataScope);
+        assertEquals("s", dataScope.deptAlias());
+        assertEquals(permission, dataScope.permission());
     }
 }

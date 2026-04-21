@@ -36,6 +36,7 @@ create table pv_station (
   location varchar(255) default null comment '地理位置',
   capacity_mw decimal(10,2) default 0.00 comment '装机容量(MW)',
   tag_id bigint(20) default null comment '标签ID',
+  dept_id bigint(20) default null comment '数据权限部门ID',
   legacy_firebase_id varchar(128) default null comment '历史Firebase ID',
   create_by varchar(64) default '' comment '创建者',
   create_time datetime default null comment '创建时间',
@@ -192,12 +193,12 @@ insert into pv_station_tag values
 ('2', '工商业屋顶', '工商业屋顶项目标签', 'legacy-tag-rooftop', 'admin', sysdate(), '', null, '默认演示标签');
 
 insert into pv_station values
-('1', '苏州工业园区一号站', '江苏省苏州市工业园区', 12.50, 1, 'legacy-station-001', 'admin', sysdate(), '', null, '迁移演示电站'),
-('2', '宁波厂房屋顶站', '浙江省宁波市北仑区', 6.80, 2, 'legacy-station-002', 'admin', sysdate(), '', null, '迁移演示电站');
+('1', '苏州工业园区一号站', '江苏省苏州市工业园区', 12.50, 1, null, 'legacy-station-001', 'admin', sysdate(), '', null, '迁移演示电站'),
+('2', '宁波厂房屋顶站', '浙江省宁波市北仑区', 6.80, 2, null, 'legacy-station-002', 'admin', sysdate(), '', null, '迁移演示电站');
 
 insert into pv_inverter_model values
-('1', '华为', 'SUN2000-50KTL', 'topic: ems/gateway/{sn}/telemetry', 'legacy-model-001', 'admin', sysdate(), '', null, '默认演示型号'),
-('2', '阳光电源', 'SG110CX', 'topic: ems/gateway/{sn}/telemetry', 'legacy-model-002', 'admin', sysdate(), '', null, '默认演示型号');
+('1', '华为', 'SUN2000-50KTL', 'topic: ems/gateway/{sn}/telemetry', null, 'legacy-model-001', 'admin', sysdate(), '', null, '默认演示型号'),
+('2', '阳光电源', 'SG110CX', 'topic: ems/gateway/{sn}/telemetry', null, 'legacy-model-002', 'admin', sysdate(), '', null, '默认演示型号');
 
 insert into pv_gateway values
 ('1', '1', '东区DTU-01', 'DTU', 'GW-001-EMS', 'online', 'MQTT', 'ModbusTCP', 'mqtt://broker.myems.local', 'ems/gateway/001', 60, date_sub(sysdate(), interval 5 minute), 'legacy-gateway-001', 'admin', sysdate(), '', null, '演示接入网关'),

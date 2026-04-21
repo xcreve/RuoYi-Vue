@@ -21,6 +21,8 @@ public class PvStation extends BaseEntity
 
     private Long tagId;
 
+    private Long deptId;
+
     private String tagName;
 
     private String legacyFirebaseId;
@@ -78,6 +80,16 @@ public class PvStation extends BaseEntity
     public void setTagId(Long tagId)
     {
         this.tagId = tagId;
+    }
+
+    public Long getDeptId()
+    {
+        return deptId;
+    }
+
+    public void setDeptId(Long deptId)
+    {
+        this.deptId = deptId;
     }
 
     public String getTagName()
