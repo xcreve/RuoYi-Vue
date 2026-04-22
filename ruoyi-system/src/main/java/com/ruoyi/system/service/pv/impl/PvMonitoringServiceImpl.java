@@ -45,6 +45,7 @@ import com.ruoyi.system.event.pv.PvDashboardRefreshPublisher;
 import com.ruoyi.system.mapper.pv.PvAssetMapper;
 import com.ruoyi.system.mapper.pv.PvCatalogMapper;
 import com.ruoyi.system.mapper.pv.PvMonitoringMapper;
+import com.ruoyi.system.metrics.pv.PvMetricsRecorder;
 import com.ruoyi.system.service.pv.IPvMonitoringService;
 
 @Service
@@ -76,6 +77,9 @@ public class PvMonitoringServiceImpl implements IPvMonitoringService
 
     @Autowired(required = false)
     private PvAlertCreatedPublisher alertCreatedPublisher;
+
+    @Autowired(required = false)
+    private PvMetricsRecorder metricsRecorder;
 
     private ModbusTcpRegisterReader modbusTcpRegisterReader = this::executeModbusTcpRead;
 
@@ -168,6 +172,7 @@ public class PvMonitoringServiceImpl implements IPvMonitoringService
         }
 
         assetMapper.insertTelemetryBatch(telemetryList);
+        recordTelemetryIngest("simulate", telemetryList.size());
         for (Map.Entry<Long, GatewaySnapshot> entry : gatewaySnapshots.entrySet())
         {
             assetMapper.updateGatewayStatus(entry.getKey(), entry.getValue().getStatus(), entry.getValue().getLastSeen());
@@ -313,6 +318,7 @@ public class PvMonitoringServiceImpl implements IPvMonitoringService
         }
 
         assetMapper.insertTelemetryBatch(telemetryList);
+        recordTelemetryIngest("polling", telemetryList.size());
         assetMapper.updateGatewayStatus(gateway.getGatewayId(), "online", now);
         evictDashboardSummaryCache();
         publishDashboardRefresh("gateway.poll");
@@ -1073,6 +1079,14 @@ public class PvMonitoringServiceImpl implements IPvMonitoringService
         if (dashboardRefreshPublisher != null)
         {
             dashboardRefreshPublisher.publish(source);
+        }
+    }
+
+    private void recordTelemetryIngest(String source, int rows)
+    {
+        if (metricsRecorder != null)
+        {
+            metricsRecorder.recordTelemetryIngest(source, rows);
         }
     }
 

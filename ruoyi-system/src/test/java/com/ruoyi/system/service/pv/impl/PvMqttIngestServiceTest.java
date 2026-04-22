@@ -4,14 +4,18 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 import com.ruoyi.common.constant.CacheConstants;
 import com.ruoyi.common.core.redis.RedisCache;
+import com.ruoyi.system.metrics.pv.PvMetricsRecorder;
 import com.ruoyi.system.domain.pv.PvGateway;
 import com.ruoyi.system.domain.pv.PvInverter;
 import com.ruoyi.system.domain.pv.PvTelemetry;
@@ -39,6 +43,15 @@ class PvMqttIngestServiceTest
 
     @InjectMocks
     private PvMqttIngestService service;
+
+    private SimpleMeterRegistry meterRegistry;
+
+    @BeforeEach
+    void setUpMetrics()
+    {
+        meterRegistry = new SimpleMeterRegistry();
+        ReflectionTestUtils.setField(service, "metricsRecorder", new PvMetricsRecorder(meterRegistry));
+    }
 
     @Test
     void refreshSubscriptionsShouldGroupBrokerTopicsAndRemoveStaleSubscription()
@@ -114,6 +127,9 @@ class PvMqttIngestServiceTest
                 any(BigDecimal.class));
         verify(assetMapper).updateGatewayStatus(eq(10L), eq("online"), any(Date.class));
         verify(redisCache).deleteObject(DASHBOARD_SUMMARY_CACHE_KEY);
+        assertEquals(1.0, meterRegistry.get("pv.mqtt.message")
+                .tag("topic", "ems/gateway/GW-10/telemetry").counter().count());
+        assertEquals(1.0, meterRegistry.get("pv.telemetry.ingest").tag("source", "mqtt").counter().count());
     }
 
     @Test

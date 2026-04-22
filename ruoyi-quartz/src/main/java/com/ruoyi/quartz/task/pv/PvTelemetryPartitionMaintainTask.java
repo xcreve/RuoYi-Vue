@@ -13,8 +13,10 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import com.ruoyi.system.metrics.pv.PvMetricsRecorder;
 
 /**
  * 光伏遥测分区月度维护任务。
@@ -37,17 +39,25 @@ public class PvTelemetryPartitionMaintainTask
 
     private final JdbcTemplate jdbcTemplate;
     private final Clock clock;
+    private final PvMetricsRecorder metricsRecorder;
 
     @Autowired
-    public PvTelemetryPartitionMaintainTask(JdbcTemplate jdbcTemplate)
+    public PvTelemetryPartitionMaintainTask(JdbcTemplate jdbcTemplate,
+            ObjectProvider<PvMetricsRecorder> metricsRecorderProvider)
     {
-        this(jdbcTemplate, Clock.systemDefaultZone());
+        this(jdbcTemplate, Clock.systemDefaultZone(), metricsRecorderProvider.getIfAvailable());
     }
 
     PvTelemetryPartitionMaintainTask(JdbcTemplate jdbcTemplate, Clock clock)
     {
+        this(jdbcTemplate, clock, null);
+    }
+
+    PvTelemetryPartitionMaintainTask(JdbcTemplate jdbcTemplate, Clock clock, PvMetricsRecorder metricsRecorder)
+    {
         this.jdbcTemplate = jdbcTemplate;
         this.clock = clock;
+        this.metricsRecorder = metricsRecorder;
     }
 
     public void maintainMonthlyPartitions()
@@ -60,6 +70,7 @@ public class PvTelemetryPartitionMaintainTask
         int months = retentionMonths == null || retentionMonths < 1 ? 12 : retentionMonths;
         YearMonth baseMonth = YearMonth.from(LocalDate.now(clock));
         List<String> partitionNames = loadPartitionNames();
+        updatePartitionCount(partitionNames.size());
         if (partitionNames.isEmpty() || !partitionNames.contains(PMAX))
         {
             throw new IllegalStateException(
@@ -98,6 +109,7 @@ public class PvTelemetryPartitionMaintainTask
 
         log.info("PV telemetry partition maintenance finished. baseMonth={}, retentionMonths={}, addedPartitions={}, droppedPartitions={}",
                 baseMonth, months, missingMonths.size(), obsoletePartitions.size());
+        recordPartitionMaintainSuccess();
     }
 
     private List<String> loadPartitionNames()
@@ -125,5 +137,21 @@ public class PvTelemetryPartitionMaintainTask
                 PARTITION_NAME_FORMATTER.format(month.atDay(1)),
                 nextBoundary,
                 PMAX);
+    }
+
+    private void updatePartitionCount(int partitionCount)
+    {
+        if (metricsRecorder != null)
+        {
+            metricsRecorder.updateTelemetryPartitionCount(partitionCount);
+        }
+    }
+
+    private void recordPartitionMaintainSuccess()
+    {
+        if (metricsRecorder != null)
+        {
+            metricsRecorder.recordPartitionMaintainSuccess(clock.instant());
+        }
     }
 }
