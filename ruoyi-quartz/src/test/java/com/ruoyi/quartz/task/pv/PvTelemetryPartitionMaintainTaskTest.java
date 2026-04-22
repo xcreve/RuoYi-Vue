@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -12,6 +13,8 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
+import com.ruoyi.system.metrics.pv.PvMetricsRecorder;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -29,9 +32,11 @@ class PvTelemetryPartitionMaintainTaskTest
     @Test
     void maintainMonthlyPartitionsShouldAddNextMonthAndDropExpiredPartition()
     {
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
         PvTelemetryPartitionMaintainTask task = new PvTelemetryPartitionMaintainTask(
                 jdbcTemplate,
-                fixedClock(2026, 5, 1, 2, 0));
+                fixedClock(2026, 5, 1, 2, 0),
+                new PvMetricsRecorder(meterRegistry));
         when(jdbcTemplate.queryForList(PvTelemetryPartitionMaintainTask.LOAD_PARTITIONS_SQL, String.class))
                 .thenReturn(partitions("202604", "202703"));
 
@@ -42,6 +47,8 @@ class PvTelemetryPartitionMaintainTaskTest
         inOrder.verify(jdbcTemplate).execute(
                 "alter table pv_telemetry reorganize partition pmax into (partition p202704 values less than (to_days('2027-05-01')), partition pmax values less than maxvalue)");
         inOrder.verify(jdbcTemplate).execute("alter table pv_telemetry drop partition p202604");
+        assertEquals(13.0, meterRegistry.get("pv.telemetry.partition.count").gauge().value());
+        assertEquals(1777572000.0, meterRegistry.get("pv.partition.maintain.last.success.timestamp").gauge().value());
     }
 
     @Test

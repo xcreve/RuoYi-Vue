@@ -45,6 +45,7 @@ import com.ruoyi.system.domain.pv.PvInverter;
 import com.ruoyi.system.domain.pv.PvTelemetry;
 import com.ruoyi.system.event.pv.PvDashboardRefreshPublisher;
 import com.ruoyi.system.mapper.pv.PvAssetMapper;
+import com.ruoyi.system.metrics.pv.PvMetricsRecorder;
 import com.ruoyi.system.service.pv.IPvMqttIngestService;
 
 @Service
@@ -70,6 +71,9 @@ public class PvMqttIngestService implements IPvMqttIngestService
 
     @Autowired(required = false)
     private PvDashboardRefreshPublisher dashboardRefreshPublisher;
+
+    @Autowired(required = false)
+    private PvMetricsRecorder metricsRecorder;
 
     private final Map<String, BrokerSubscription> activeSubscriptions = new ConcurrentHashMap<>();
     private final Map<String, IntegrationFlowContext.IntegrationFlowRegistration> flowRegistrations = new ConcurrentHashMap<>();
@@ -120,6 +124,7 @@ public class PvMqttIngestService implements IPvMqttIngestService
     @Transactional
     public int ingestMessage(String brokerUrl, String topic, String payload)
     {
+        recordMqttMessage(topic);
         if (StringUtils.isBlank(topic) || StringUtils.isBlank(payload))
         {
             return 0;
@@ -144,6 +149,7 @@ public class PvMqttIngestService implements IPvMqttIngestService
         {
             insertedRows += ingestGatewayMessage(gateway, topic, payload);
         }
+        recordTelemetryIngest(insertedRows);
         return insertedRows;
     }
 
@@ -732,6 +738,22 @@ public class PvMqttIngestService implements IPvMqttIngestService
         if (dashboardRefreshPublisher != null)
         {
             dashboardRefreshPublisher.publish(source);
+        }
+    }
+
+    private void recordMqttMessage(String topic)
+    {
+        if (metricsRecorder != null)
+        {
+            metricsRecorder.recordMqttMessage(topic);
+        }
+    }
+
+    private void recordTelemetryIngest(int rows)
+    {
+        if (metricsRecorder != null)
+        {
+            metricsRecorder.recordTelemetryIngest("mqtt", rows);
         }
     }
 
